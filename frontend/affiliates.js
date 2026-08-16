@@ -1,7 +1,7 @@
 // Widget de inserción automática de enlaces de afiliados para MeshTorrents.
 // Se importa como módulo ES desde index.html: import { ... } from './affiliates.js';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = window.MESHTORRENTS_API_BASE || 'http://localhost:8000/api';
 
 // Traduce la categoría de un modelo 3D a la categoría de insumo más relevante.
 const MODEL_TO_AFFILIATE_CATEGORY = {

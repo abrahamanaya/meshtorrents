@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MeshTorrents — Catálogo P2P de Modelos 3D</title>
 
+<script>
+  // URL del backend en producción (Render). Actualiza PROD_API_BASE con la URL real
+  // que te asigne Render tras desplegar el servicio "meshtorrents-api".
+  const PROD_API_BASE = 'https://meshtorrents-api.onrender.com/api';
+  const LOCAL_API_BASE = 'http://localhost:8000/api';
+  window.MESHTORRENTS_API_BASE =
+    ['localhost', '127.0.0.1'].includes(window.location.hostname) ? LOCAL_API_BASE : PROD_API_BASE;
+</script>
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -306,7 +315,7 @@
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   import { mountViewerRecommendation, mountRecommendedSupplies, mountSidebarRotatingBanner } from './affiliates.js';
 
-  const API_BASE = 'http://localhost:8000/api';
+  const API_BASE = window.MESHTORRENTS_API_BASE;
 
   const grid = document.getElementById('models-grid');
   const emptyState = document.getElementById('empty-state');
