@@ -1,9 +1,3 @@
-databases:
-  - name: meshtorrents-db
-    plan: free
-    databaseName: meshtorrents
-    user: meshtorrents
-
 services:
   - type: web
     name: meshtorrents-api
@@ -15,10 +9,6 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
-      - key: DATABASE_URL
-        fromDatabase:
-          name: meshtorrents-db
-          property: connectionString
       - key: PROWLARR_URL
         value: http://localhost:9696
       - key: PROWLARR_API_KEY
