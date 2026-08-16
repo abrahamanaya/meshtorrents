@@ -32,6 +32,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/")
+def root():
+    return {
+        "service": "MeshTorrents API",
+        "docs": "/docs",
+        "frontend": "https://abrahamanaya.github.io/meshtorrents/",
+    }
+
+
 SEED_MODELS = [
     dict(
         title="Cabeza Articulada PR2",
