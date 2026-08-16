@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MeshTorrents — Catálogo P2P de Modelos 3D</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          bg: '#0b0f14',
+          surface: '#121821',
+          surface2: '#1a2230',
+          border: '#26303f',
+          accent: '#22d3ee',
+          accent2: '#818cf8',
+        },
+      },
+    },
+  };
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #0b0f14; }
+  ::-webkit-scrollbar-thumb { background: #26303f; border-radius: 8px; }
+  .glow { box-shadow: 0 0 0 1px rgba(34,211,238,0.15), 0 8px 30px rgba(34,211,238,0.06); }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fade-in .25s ease-out; }
+</style>
+</head>
+
+<body class="bg-bg text-slate-200 min-h-screen">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 border-b border-border bg-bg/90 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-accent to-accent2 flex items-center justify-center font-bold text-bg">M</div>
+        <div>
+          <h1 class="text-lg font-semibold text-white leading-none">MeshTorrents</h1>
+          <p class="text-xs text-slate-400 leading-none mt-1">Catálogo & meta-buscador P2P de modelos 3D</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-open-scraper" class="inline-flex items-center gap-2 rounded-lg bg-surface2 hover:bg-border text-slate-300 border border-border px-4 py-2 text-sm font-medium transition">
+          <span class="text-base leading-none">🔍</span> Scraper
+        </button>
+        <button id="btn-open-admin" class="inline-flex items-center gap-2 rounded-lg bg-surface2 hover:bg-border text-slate-300 border border-border px-4 py-2 text-sm font-medium transition">
+          <span class="text-base leading-none">⚙</span> Afiliados
+        </button>
+        <button id="btn-open-add" class="inline-flex items-center gap-2 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 px-4 py-2 text-sm font-medium transition">
+          <span class="text-lg leading-none">+</span> Agregar modelo
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main layout: catálogo + sidebar de ofertas -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col lg:flex-row gap-6 items-start">
+
+    <div class="flex-1 min-w-0 w-full">
+      <!-- Search / Filters -->
+      <section>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">⌕</span>
+            <input id="search-input" type="text" placeholder="Buscar por título, autor o etiquetas…"
+              class="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2.5 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/40" />
+          </div>
+          <select id="category-select"
+            class="bg-surface border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/40">
+            <option value="">Todas las categorías</option>
+            <option value="Miniaturas">Miniaturas</option>
+            <option value="Herramientas">Herramientas</option>
+            <option value="Repuestos">Repuestos</option>
+            <option value="Decoración">Decoración</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Status -->
+      <p id="results-count" class="text-xs text-slate-500 pt-4"></p>
+
+      <!-- Grid -->
+      <main class="pt-2">
+        <div id="models-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        <div id="empty-state" class="hidden text-center py-20 text-slate-500">
+          <p class="text-4xl mb-3">◇</p>
+          <p>No se encontraron modelos con esos filtros.</p>
+        </div>
+      </main>
+    </div>
+
+    <!-- Sidebar: banner rotativo de afiliados -->
+    <aside class="w-full lg:w-72 shrink-0">
+      <div class="lg:sticky lg:top-24">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Ofertas Maker del Día</h3>
+        <div id="sidebar-affiliate-banner" class="transition-opacity duration-200"></div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-surface2 border border-accent/30 text-sm text-accent px-4 py-3 rounded-lg glow fade-in"></div>
+
+  <!-- Preview Modal -->
+  <div id="preview-modal" class="fixed inset-0 z-40 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close-preview></div>
+    <div class="relative z-10 max-w-4xl mx-auto mt-8 sm:mt-14 mb-8 bg-surface border border-border rounded-xl overflow-hidden fade-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+        <div>
+          <h3 id="preview-title" class="text-white font-medium"></h3>
+          <p id="preview-subtitle" class="text-xs text-slate-500"></p>
+        </div>
+        <button data-close-preview class="text-slate-400 hover:text-white text-xl leading-none px-2">×</button>
+      </div>
+      <div class="relative bg-[#05080c]" style="height: 55vh;">
+        <div id="viewer-canvas-holder" class="absolute inset-0"></div>
+        <div id="viewer-loading" class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm gap-2">
+          <span class="h-4 w-4 rounded-full border-2 border-accent border-t-transparent animate-spin"></span>
+          Cargando modelo STL…
+        </div>
+        <div id="viewer-error" class="hidden absolute inset-0 flex items-center justify-center text-red-400 text-sm px-6 text-center"></div>
+      </div>
+      <div class="px-5 py-3 border-b border-border text-xs text-slate-500">
+        Arrastra para rotar · Rueda del ratón para hacer zoom
+      </div>
+
+      <!-- Widget de afiliados: recomendación compacta debajo del visor -->
+      <div id="viewer-affiliate-slot" class="px-5 py-3 border-b border-border"></div>
+
+      <!-- Widget de afiliados: bloque "Insumos recomendados para este modelo" -->
+      <div id="recommended-supplies" class="px-5 py-4"></div>
+    </div>
+  </div>
+
+  <!-- Add Model Modal -->
+  <div id="add-modal" class="fixed inset-0 z-40 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close-add></div>
+    <div class="relative z-10 max-w-lg mx-auto mt-8 sm:mt-14 mb-8 bg-surface border border-border rounded-xl overflow-hidden fade-in max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+        <h3 class="text-white font-medium">Agregar modelo 3D</h3>
+        <button data-close-add class="text-slate-400 hover:text-white text-xl leading-none px-2">×</button>
+      </div>
+      <form id="add-form" class="px-5 py-4 space-y-3 overflow-y-auto">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Título *</label>
+          <input required name="title" class="form-input" placeholder="Soporte para cable USB-C" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+          <textarea name="description" rows="2" class="form-input resize-none" placeholder="Breve descripción del modelo…"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Autor *</label>
+            <input required name="author" class="form-input" placeholder="Nombre / alias" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Licencia *</label>
+            <input required name="license" class="form-input" placeholder="CC-BY-4.0" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Categoría *</label>
+            <select required name="category" class="form-input">
+              <option value="">Selecciona…</option>
+              <option value="Miniaturas">Miniaturas</option>
+              <option value="Herramientas">Herramientas</option>
+              <option value="Repuestos">Repuestos</option>
+              <option value="Decoración">Decoración</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Tags</label>
+            <input name="tags" class="form-input" placeholder="soporte, cable, escritorio" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Infohash * (identificador P2P único)</label>
+          <input required name="infohash" class="form-input font-mono text-xs" placeholder="a1b2c3d4e5f6…" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Enlace / Magnet link *</label>
+          <input required name="source_uri" class="form-input font-mono text-xs" placeholder="magnet:?xt=urn:btih:…" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">URL de vista previa STL</label>
+          <input name="stl_preview_url" class="form-input font-mono text-xs" placeholder="https://…/modelo.stl" />
+        </div>
+        <p id="form-error" class="hidden text-xs text-red-400"></p>
+        <div class="pt-2 flex gap-2 justify-end">
+          <button type="button" data-close-add class="px-4 py-2 text-sm rounded-lg border border-border text-slate-300 hover:bg-surface2">Cancelar</button>
+          <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-accent text-bg font-medium hover:bg-accent/90">Publicar modelo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin: Enlaces de Afiliados Modal -->
+  <div id="admin-modal" class="fixed inset-0 z-40 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close-admin></div>
+    <div class="relative z-10 max-w-lg mx-auto mt-8 sm:mt-14 mb-8 bg-surface border border-border rounded-xl overflow-hidden fade-in max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+        <div>
+          <h3 class="text-white font-medium">Panel Admin · Enlaces de afiliados</h3>
+          <p class="text-xs text-slate-500">Pega un enlace de Mercado Libre para rotarlo en el sitio</p>
+        </div>
+        <button data-close-admin class="text-slate-400 hover:text-white text-xl leading-none px-2">×</button>
+      </div>
+      <form id="admin-form" class="px-5 py-4 space-y-3 overflow-y-auto">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Título del producto *</label>
+          <input required name="title" class="form-input" placeholder="Filamento PLA Sunlu 1.75mm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Categoría *</label>
+            <select required name="category" class="form-input">
+              <option value="">Selecciona…</option>
+              <option value="filamentos">Filamentos</option>
+              <option value="impresoras">Impresoras</option>
+              <option value="resinas">Resinas</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Precio (referencia)</label>
+            <input name="price_hint" class="form-input" placeholder="$399 MXN" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Enlace de afiliado (Mercado Libre) *</label>
+          <input required name="affiliate_url" type="url" class="form-input font-mono text-xs" placeholder="https://www.mercadolibre.com.mx/...?matt_tool=..." />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">URL de imagen del producto</label>
+          <input name="image_url" type="url" class="form-input font-mono text-xs" placeholder="https://http2.mlstatic.com/…" />
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-400">
+          <input type="checkbox" name="is_active" checked class="rounded border-border bg-surface2 text-accent focus:ring-accent/40" />
+          Activo (visible en la rotación del sitio)
+        </label>
+        <p id="admin-form-error" class="hidden text-xs text-red-400"></p>
+        <div class="pt-2 flex gap-2 justify-end">
+          <button type="button" data-close-admin class="px-4 py-2 text-sm rounded-lg border border-border text-slate-300 hover:bg-surface2">Cancelar</button>
+          <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-accent text-bg font-medium hover:bg-accent/90">Guardar enlace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin: Scraper Prowlarr/Jackett Modal -->
+  <div id="scraper-modal" class="fixed inset-0 z-40 hidden">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close-scraper></div>
+    <div class="relative z-10 max-w-lg mx-auto mt-8 sm:mt-14 mb-8 bg-surface border border-border rounded-xl overflow-hidden fade-in max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+        <div>
+          <h3 class="text-white font-medium">Admin · Scraper Prowlarr/Jackett</h3>
+          <p class="text-xs text-slate-500">Importa modelos STL/3D automáticamente desde tu indexador</p>
+        </div>
+        <button data-close-scraper class="text-slate-400 hover:text-white text-xl leading-none px-2">×</button>
+      </div>
+      <form id="scraper-form" class="px-5 py-4 space-y-3 overflow-y-auto">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">URL del servidor</label>
+          <input name="prowlarr_url" type="url" class="form-input font-mono text-xs" placeholder="http://localhost:9696" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">API Key</label>
+          <input name="prowlarr_api_key" type="password" class="form-input font-mono text-xs" placeholder="Dejar en blanco para no cambiarla" autocomplete="off" />
+          <p id="scraper-current-key" class="text-[11px] text-slate-500 mt-1">Cargando configuración actual…</p>
+        </div>
+        <p id="scraper-status" class="hidden text-xs mt-2"></p>
+        <div class="pt-2 flex flex-wrap gap-2 justify-end">
+          <button type="button" data-close-scraper class="px-4 py-2 text-sm rounded-lg border border-border text-slate-300 hover:bg-surface2">Cerrar</button>
+          <button type="button" id="btn-scan-now" class="px-4 py-2 text-sm rounded-lg bg-surface2 hover:bg-border text-slate-200 border border-border font-medium">Escanear Ahora</button>
+          <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-accent text-bg font-medium hover:bg-accent/90">Probar Conexión y Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { mountViewerRecommendation, mountRecommendedSupplies, mountSidebarRotatingBanner } from './affiliates.js';
+
+  const API_BASE = 'http://localhost:8000/api';
+
+  const grid = document.getElementById('models-grid');
+  const emptyState = document.getElementById('empty-state');
+  const resultsCount = document.getElementById('results-count');
+  const searchInput = document.getElementById('search-input');
+  const categorySelect = document.getElementById('category-select');
+  const toast = document.getElementById('toast');
+
+  let debounceTimer = null;
+  let currentModels = [];
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.add('hidden'), 2200);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  function tagList(tags) {
+    if (!tags) return [];
+    return tags.split(',').map((t) => t.trim()).filter(Boolean);
+  }
+
+  async function fetchModels() {
+    const params = new URLSearchParams();
+    const query = searchInput.value.trim();
+    const category = categorySelect.value;
+    if (query) params.set('query', query);
+    if (category) params.set('category', category);
+
+    try {
+      const res = await fetch(`${API_BASE}/models?${params.toString()}`);
+      if (!res.ok) throw new Error('Error al consultar la API');
+      currentModels = await res.json();
+      renderModels(currentModels);
+    } catch (err) {
+      grid.innerHTML = '';
+      resultsCount.textContent = '';
+      emptyState.classList.remove('hidden');
+      emptyState.querySelector('p:last-child').textContent =
+        `No se pudo conectar con la API (${API_BASE}). ¿Está corriendo el backend?`;
+    }
+  }
+
+  function renderModels(list) {
+    grid.innerHTML = '';
+    if (!list.length) {
+      emptyState.classList.remove('hidden');
+      emptyState.querySelector('p:last-child').textContent = 'No se encontraron modelos con esos filtros.';
+      resultsCount.textContent = '';
+      return;
+    }
+    emptyState.classList.add('hidden');
+    resultsCount.textContent = `${list.length} modelo${list.length === 1 ? '' : 's'} encontrado${list.length === 1 ? '' : 's'}`;
+
+    for (const model of list) {
+      const card = document.createElement('div');
+      card.className = 'bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 hover:border-accent/40 transition fade-in';
+
+      const tags = tagList(model.tags);
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="font-medium text-white leading-tight">${escapeHtml(model.title)}</h3>
+          <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide bg-accent2/10 text-accent2 border border-accent2/30 rounded px-2 py-0.5">${escapeHtml(model.license)}</span>
+        </div>
+        <p class="text-sm text-slate-400 line-clamp-2">${escapeHtml(model.description || 'Sin descripción.')}</p>
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+          <span>por <span class="text-slate-300">${escapeHtml(model.author)}</span></span>
+          <span>·</span>
+          <span class="text-accent">${escapeHtml(model.category)}</span>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          ${tags.map((t) => `<span class="text-[10px] bg-surface2 border border-border rounded-full px-2 py-0.5 text-slate-400">#${escapeHtml(t)}</span>`).join('')}
+        </div>
+        <div class="mt-auto pt-2 flex gap-2">
+          <button data-action="preview" class="flex-1 text-xs font-medium rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 px-3 py-2 transition">
+            Ver Vista Previa 3D
+          </button>
+          <button data-action="copy" class="text-xs font-medium rounded-lg bg-surface2 hover:bg-border text-slate-300 border border-border px-3 py-2 transition">
+            Copiar Enlace P2P
+          </button>
+        </div>
+      `;
+
+      card.querySelector('[data-action="preview"]').addEventListener('click', () => openPreview(model));
+      card.querySelector('[data-action="copy"]').addEventListener('click', () => copyP2PLink(model.source_uri));
+
+      grid.appendChild(card);
+    }
+  }
+
+  function copyP2PLink(uri) {
+    navigator.clipboard.writeText(uri || '').then(() => {
+      showToast('Enlace P2P copiado al portapapeles');
+    }).catch(() => {
+      showToast('No se pudo copiar el enlace');
+    });
+  }
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(fetchModels, 300);
+  });
+  categorySelect.addEventListener('change', fetchModels);
+
+  // ---------- 3D Preview Modal (Three.js) ----------
+  const previewModal = document.getElementById('preview-modal');
+  const previewTitle = document.getElementById('preview-title');
+  const previewSubtitle = document.getElementById('preview-subtitle');
+  const canvasHolder = document.getElementById('viewer-canvas-holder');
+  const viewerLoading = document.getElementById('viewer-loading');
+  const viewerError = document.getElementById('viewer-error');
+
+  let renderer, scene, camera, controls, animationId, mesh, resizeObserver;
+
+  function initViewer() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05080c);
+
+    camera = new THREE.PerspectiveCamera(45, canvasHolder.clientWidth / canvasHolder.clientHeight, 0.1, 5000);
+    camera.position.set(0, 0, 100);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(canvasHolder.clientWidth, canvasHolder.clientHeight);
+    canvasHolder.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    const dirLight = new THREE.DirectionalLight(0x88ccff, 1.2);
+    dirLight.position.set(1, 1, 1);
+    const dirLight2 = new THREE.DirectionalLight(0xff88cc, 0.5);
+    dirLight2.position.set(-1, -1, 1);
+    scene.add(ambient, dirLight, dirLight2);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    resizeObserver = new ResizeObserver(() => {
+      if (!renderer) return;
+      const w = canvasHolder.clientWidth, h = canvasHolder.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+    resizeObserver.observe(canvasHolder);
+
+    animate();
+  }
+
+  function animate() {
+    animationId = requestAnimationFrame(animate);
+    controls?.update();
+    renderer?.render(scene, camera);
+  }
+
+  function loadStl(url) {
+    const loader = new STLLoader();
+    loader.load(
+      url,
+      (geometry) => {
+        geometry.computeVertexNormals();
+        geometry.center();
+
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x22d3ee,
+          metalness: 0.15,
+          roughness: 0.55,
+        });
+        mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        geometry.computeBoundingSphere();
+        const radius = geometry.boundingSphere?.radius || 50;
+        camera.position.set(radius * 1.8, radius * 1.2, radius * 1.8);
+        camera.near = radius / 100;
+        camera.far = radius * 100;
+        camera.updateProjectionMatrix();
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        viewerLoading.classList.add('hidden');
+      },
+      undefined,
+      (err) => {
+        viewerLoading.classList.add('hidden');
+        viewerError.textContent = 'No se pudo cargar el archivo STL desde la URL proporcionada.';
+        viewerError.classList.remove('hidden');
+      }
+    );
+  }
+
+  const viewerAffiliateSlot = document.getElementById('viewer-affiliate-slot');
+  const recommendedSupplies = document.getElementById('recommended-supplies');
+
+  function openPreview(model) {
+    previewTitle.textContent = model.title;
+    previewSubtitle.textContent = `${model.category} · ${model.license}`;
+    viewerError.classList.add('hidden');
+
+    previewModal.classList.remove('hidden');
+
+    if (!renderer) initViewer();
+
+    if (!model.stl_preview_url) {
+      viewerLoading.classList.add('hidden');
+      viewerError.textContent = 'Este modelo no tiene una URL de vista previa STL configurada.';
+      viewerError.classList.remove('hidden');
+      return;
+    }
+
+    viewerLoading.classList.remove('hidden');
+    loadStl(model.stl_preview_url);
+
+    mountViewerRecommendation(viewerAffiliateSlot, model.category);
+    mountRecommendedSupplies(recommendedSupplies, model.category);
+  }
+
+  function closePreview() {
+    previewModal.classList.add('hidden');
+    if (mesh) {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      mesh = null;
+    }
+    viewerAffiliateSlot.innerHTML = '';
+    recommendedSupplies.innerHTML = '';
+  }
+
+  document.querySelectorAll('[data-close-preview]').forEach((el) =>
+    el.addEventListener('click', closePreview)
+  );
+
+  // ---------- Add Model Modal ----------
+  const addModal = document.getElementById('add-modal');
+  const addForm = document.getElementById('add-form');
+  const formError = document.getElementById('form-error');
+
+  document.getElementById('btn-open-add').addEventListener('click', () => {
+    formError.classList.add('hidden');
+    addModal.classList.remove('hidden');
+  });
+  document.querySelectorAll('[data-close-add]').forEach((el) =>
+    el.addEventListener('click', () => addModal.classList.add('hidden'))
+  );
+
+  addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    formError.classList.add('hidden');
+
+    const data = Object.fromEntries(new FormData(addForm).entries());
+    Object.keys(data).forEach((k) => {
+      if (data[k] === '') data[k] = null;
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/models`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Error al crear el modelo');
+      }
+
+      addForm.reset();
+      addModal.classList.add('hidden');
+      showToast('Modelo publicado en el catálogo');
+      fetchModels();
+    } catch (err) {
+      formError.textContent = err.message;
+      formError.classList.remove('hidden');
+    }
+  });
+
+  // ---------- Admin: Enlaces de Afiliados ----------
+  const adminModal = document.getElementById('admin-modal');
+  const adminForm = document.getElementById('admin-form');
+  const adminFormError = document.getElementById('admin-form-error');
+
+  document.getElementById('btn-open-admin').addEventListener('click', () => {
+    adminFormError.classList.add('hidden');
+    adminModal.classList.remove('hidden');
+  });
+  document.querySelectorAll('[data-close-admin]').forEach((el) =>
+    el.addEventListener('click', () => adminModal.classList.add('hidden'))
+  );
+
+  adminForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    adminFormError.classList.add('hidden');
+
+    const formData = new FormData(adminForm);
+    const data = {
+      title: formData.get('title'),
+      category: formData.get('category'),
+      affiliate_url: formData.get('affiliate_url'),
+      image_url: formData.get('image_url') || null,
+      price_hint: formData.get('price_hint') || null,
+      is_active: formData.get('is_active') === 'on',
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/affiliates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Error al guardar el enlace de afiliado');
+      }
+
+      adminForm.reset();
+      adminModal.classList.add('hidden');
+      showToast('Enlace de afiliado guardado');
+    } catch (err) {
+      adminFormError.textContent = err.message;
+      adminFormError.classList.remove('hidden');
+    }
+  });
+
+  // ---------- Admin: Scraper Prowlarr/Jackett ----------
+  const scraperModal = document.getElementById('scraper-modal');
+  const scraperForm = document.getElementById('scraper-form');
+  const scraperCurrentKey = document.getElementById('scraper-current-key');
+  const scraperStatus = document.getElementById('scraper-status');
+  const btnScanNow = document.getElementById('btn-scan-now');
+
+  function setScraperStatus(message, tone) {
+    const tones = {
+      info: 'text-slate-400',
+      success: 'text-emerald-400',
+      warning: 'text-amber-400',
+      error: 'text-red-400',
+    };
+    scraperStatus.textContent = message;
+    scraperStatus.className = `text-xs mt-2 ${tones[tone] || tones.info}`;
+  }
+
+  async function loadScraperSettings() {
+    scraperCurrentKey.textContent = 'Cargando configuración actual…';
+    try {
+      const res = await fetch(`${API_BASE}/settings`);
+      if (!res.ok) throw new Error('No se pudo cargar la configuración');
+      const data = await res.json();
+
+      scraperForm.elements['prowlarr_url'].value = data.prowlarr_url;
+      scraperCurrentKey.textContent = data.prowlarr_api_key_masked
+        ? `Key actual: ${data.prowlarr_api_key_masked} (${data.source === 'database' ? 'guardada en BD' : 'desde .env'})`
+        : 'Aún no hay una API Key configurada.';
+    } catch (err) {
+      scraperCurrentKey.textContent = 'No se pudo cargar la configuración actual.';
+    }
+  }
+
+  document.getElementById('btn-open-scraper').addEventListener('click', () => {
+    scraperStatus.classList.add('hidden');
+    scraperModal.classList.remove('hidden');
+    loadScraperSettings();
+  });
+  document.querySelectorAll('[data-close-scraper]').forEach((el) =>
+    el.addEventListener('click', () => scraperModal.classList.add('hidden'))
+  );
+
+  scraperForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setScraperStatus('Probando conexión y guardando…', 'info');
+
+    const formData = new FormData(scraperForm);
+    const payload = {};
+    if (formData.get('prowlarr_url')) payload.prowlarr_url = formData.get('prowlarr_url');
+    if (formData.get('prowlarr_api_key')) payload.prowlarr_api_key = formData.get('prowlarr_api_key');
+
+    try {
+      const res = await fetch(`${API_BASE}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Error al guardar la configuración');
+      }
+      const data = await res.json();
+
+      scraperForm.elements['prowlarr_api_key'].value = '';
+      scraperCurrentKey.textContent = `Key actual: ${data.prowlarr_api_key_masked} (guardada en BD)`;
+
+      if (data.connection_ok) {
+        setScraperStatus('✓ Conexión exitosa. Configuración guardada.', 'success');
+      } else {
+        setScraperStatus('⚠ Configuración guardada, pero no se pudo conectar con Prowlarr/Jackett. Verifica la URL y la API Key.', 'warning');
+      }
+    } catch (err) {
+      setScraperStatus(err.message, 'error');
+    }
+  });
+
+  btnScanNow.addEventListener('click', async () => {
+    btnScanNow.disabled = true;
+    setScraperStatus('Escaneando Prowlarr/Jackett…', 'info');
+
+    try {
+      const res = await fetch(`${API_BASE}/scraper/trigger`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al ejecutar el escaneo');
+
+      if (data.errors && data.errors.length) {
+        setScraperStatus(`⚠ ${data.errors.join(' ')}`, 'warning');
+      } else {
+        setScraperStatus(
+          `Encontrados: ${data.found} · Importados: ${data.imported} · Ya existían: ${data.skipped}`,
+          'success'
+        );
+        if (data.imported > 0) {
+          showToast(`${data.imported} modelo(s) nuevo(s) importado(s) al catálogo`);
+          fetchModels();
+        }
+      }
+    } catch (err) {
+      setScraperStatus(err.message, 'error');
+    } finally {
+      btnScanNow.disabled = false;
+    }
+  });
+
+  // Init
+  fetchModels();
+  mountSidebarRotatingBanner(document.getElementById('sidebar-affiliate-banner'));
+</script>
+
+<style>
+  .form-input {
+    width: 100%;
+    background: #1a2230;
+    border: 1px solid #26303f;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #e2e8f0;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: rgba(34,211,238,0.4);
+    box-shadow: 0 0 0 2px rgba(34,211,238,0.15);
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
+
+</body>
+</html>
